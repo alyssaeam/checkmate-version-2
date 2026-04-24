@@ -1,19 +1,19 @@
 <?php
-function navActive($page, $dir = null) {
+function navActive($pages, $dir = null) {
     global $current_page, $current_dir;
     if ($dir && $current_dir !== $dir) return '';
-    if (is_array($page)) {
-        return in_array($current_page, $page) ? 'active' : '';
-    }
-    return $current_page === $page ? 'active' : '';
+    $pages = (array)$pages;
+    return in_array($current_page, $pages) ? 'active' : '';
 }
 ?>
+
+<!-- ═══════════════════════════════════════════════
+     DESKTOP SIDEBAR
+     ═══════════════════════════════════════════════ -->
 <aside class="sidebar" id="sidebar">
 
-    <!-- Brand / Logo -->
     <div class="sidebar-brand">
         <div class="sidebar-brand-icon">
-            <!-- Checkmate logo: checkbox with checkmark -->
             <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <rect x="3" y="3" width="18" height="18" rx="3"
                       fill="none" stroke="#fff" stroke-width="2"/>
@@ -26,10 +26,10 @@ function navActive($page, $dir = null) {
         <span class="sidebar-brand-name">Checkmate</span>
     </div>
 
-    <!-- Navigation -->
     <nav class="sidebar-nav">
 
         <?php if (isAdmin()): ?>
+
         <div class="sidebar-section-label">Main</div>
 
         <a href="../admin/home.php"
@@ -42,7 +42,9 @@ function navActive($page, $dir = null) {
            class="nav-item-link <?php echo navActive(
                ['tasks.php','create_task.php','edit_task.php','task_detail.php'],
                'admin'); ?>">
-            <span class="nav-item-icon"><i class="bi bi-check2-square"></i></span>
+            <span class="nav-item-icon">
+                <i class="bi bi-check2-square"></i>
+            </span>
             <span class="nav-item-label">Tasks</span>
             <?php if ($confirm_count > 0): ?>
             <span class="nav-badge"><?php echo $confirm_count; ?></span>
@@ -67,11 +69,14 @@ function navActive($page, $dir = null) {
 
         <a href="../admin/profile.php"
            class="nav-item-link <?php echo navActive('profile.php','admin'); ?>">
-            <span class="nav-item-icon"><i class="bi bi-person-circle"></i></span>
+            <span class="nav-item-icon">
+                <i class="bi bi-person-circle"></i>
+            </span>
             <span class="nav-item-label">Profile</span>
         </a>
 
         <?php else: ?>
+
         <div class="sidebar-section-label">Main</div>
 
         <a href="../member/home.php"
@@ -83,7 +88,9 @@ function navActive($page, $dir = null) {
         <a href="../member/tasks.php"
            class="nav-item-link <?php echo navActive(
                ['tasks.php','task_detail.php'],'member'); ?>">
-            <span class="nav-item-icon"><i class="bi bi-check2-square"></i></span>
+            <span class="nav-item-icon">
+                <i class="bi bi-check2-square"></i>
+            </span>
             <span class="nav-item-label">Tasks</span>
         </a>
 
@@ -105,14 +112,16 @@ function navActive($page, $dir = null) {
 
         <a href="../member/profile.php"
            class="nav-item-link <?php echo navActive('profile.php','member'); ?>">
-            <span class="nav-item-icon"><i class="bi bi-person-circle"></i></span>
+            <span class="nav-item-icon">
+                <i class="bi bi-person-circle"></i>
+            </span>
             <span class="nav-item-label">Profile</span>
         </a>
 
         <?php endif; ?>
     </nav>
 
-    <!-- Sidebar footer -->
+    <!-- Sidebar footer: avatar + logout icon only -->
     <div class="sidebar-footer">
         <div class="sidebar-user">
             <div class="sidebar-avatar">
@@ -128,10 +137,118 @@ function navActive($page, $dir = null) {
                 </div>
             </div>
             <a href="../shared/logout.php"
-               class="sidebar-logout" title="Log out">
+               class="sidebar-logout"
+               title="Log out"
+               onclick="return confirm('Log out of Checkmate?')">
                 <i class="bi bi-box-arrow-right"></i>
             </a>
         </div>
     </div>
 
 </aside>
+
+
+<!-- ═══════════════════════════════════════════════
+     MOBILE BOTTOM NAVIGATION
+     ═══════════════════════════════════════════════ -->
+<nav class="bottom-nav" id="bottomNav">
+
+    <?php if (isAdmin()): ?>
+
+    <a href="../admin/home.php"
+       class="bottom-nav-item <?php echo navActive('home.php','admin'); ?>">
+        <span class="bottom-nav-icon">
+            <i class="bi bi-house"></i>
+        </span>
+        <span class="bottom-nav-label">Home</span>
+    </a>
+
+    <a href="../admin/tasks.php"
+       class="bottom-nav-item <?php echo navActive(
+           ['tasks.php','create_task.php','edit_task.php','task_detail.php'],
+           'admin'); ?>">
+        <span class="bottom-nav-icon" style="position:relative">
+            <i class="bi bi-check2-square"></i>
+            <?php if ($confirm_count > 0): ?>
+            <span class="bottom-nav-badge">
+                <?php echo $confirm_count; ?>
+            </span>
+            <?php endif; ?>
+        </span>
+        <span class="bottom-nav-label">Tasks</span>
+    </a>
+
+    <a href="../admin/calendar.php"
+       class="bottom-nav-item <?php echo navActive('calendar.php','admin'); ?>">
+        <span class="bottom-nav-icon">
+            <i class="bi bi-calendar3"></i>
+        </span>
+        <span class="bottom-nav-label">Calendar</span>
+    </a>
+
+    <a href="../admin/users.php"
+       class="bottom-nav-item <?php echo navActive('users.php','admin'); ?>">
+        <span class="bottom-nav-icon">
+            <i class="bi bi-people"></i>
+        </span>
+        <span class="bottom-nav-label">Users</span>
+    </a>
+
+    <a href="../admin/profile.php"
+       class="bottom-nav-item <?php echo navActive('profile.php','admin'); ?>">
+        <span class="bottom-nav-icon">
+            <span class="bottom-nav-avatar">
+                <?php echo htmlspecialchars($initials); ?>
+            </span>
+        </span>
+        <span class="bottom-nav-label">Profile</span>
+    </a>
+
+    <?php else: ?>
+
+    <a href="../member/home.php"
+       class="bottom-nav-item <?php echo navActive('home.php','member'); ?>">
+        <span class="bottom-nav-icon">
+            <i class="bi bi-house"></i>
+        </span>
+        <span class="bottom-nav-label">Home</span>
+    </a>
+
+    <a href="../member/tasks.php"
+       class="bottom-nav-item <?php echo navActive(
+           ['tasks.php','task_detail.php'],'member'); ?>">
+        <span class="bottom-nav-icon">
+            <i class="bi bi-check2-square"></i>
+        </span>
+        <span class="bottom-nav-label">Tasks</span>
+    </a>
+
+    <a href="../member/calendar.php"
+       class="bottom-nav-item <?php echo navActive('calendar.php','member'); ?>">
+        <span class="bottom-nav-icon">
+            <i class="bi bi-calendar3"></i>
+        </span>
+        <span class="bottom-nav-label">Calendar</span>
+    </a>
+
+    <a href="../member/categories.php"
+       class="bottom-nav-item <?php echo navActive('categories.php','member'); ?>">
+        <span class="bottom-nav-icon">
+            <i class="bi bi-tag"></i>
+        </span>
+        <span class="bottom-nav-label">Categories</span>
+    </a>
+
+    <a href="../member/profile.php"
+       class="bottom-nav-item <?php echo navActive('profile.php','member'); ?>">
+        <span class="bottom-nav-icon">
+            <span class="bottom-nav-avatar">
+                <?php echo htmlspecialchars($initials); ?>
+            </span>
+        </span>
+        <span class="bottom-nav-label">Profile</span>
+    </a>
+
+    <?php endif; ?>
+
+</nav>
