@@ -1,20 +1,24 @@
 <?php
-// ── POST LOGIC BEFORE ANY OUTPUT ─────────────────────────
-require_once '../config/database.php';
 session_start();
+require_once '../config/database.php';
 
-if (!isset($_SESSION['user_id']) || $_SESSION['role_id'] != 1) {
+if (!isset($_SESSION['user_id'])) {
     header("Location: ../shared/login.php"); exit();
 }
+if ((int)$_SESSION['role_id'] !== 1) {
+    header("Location: ../member/home.php"); exit();
+}
 
-$admin_id  = (int)$_SESSION['user_id'];
+$admin_id   = (int)$_SESSION['user_id'];
 $save_error = '';
 
+// All POST handling before HTML
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action  = $_POST['action'] ?? 'save';
     $task_id = (int)($_POST['id'] ?? 0);
 
-    $own = $pdo->prepare("SELECT id FROM tasks WHERE id=? AND created_by=?");
+    $own = $pdo->prepare(
+        "SELECT id FROM tasks WHERE id=? AND created_by=?");
     $own->execute([$task_id, $admin_id]);
     if (!$own->fetch()) {
         header("Location: tasks.php?error=unauthorized"); exit();
@@ -35,65 +39,68 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($action === 'save') {
-        $title       = trim($_POST['title'] ?? '');
+        $title       = trim($_POST['title']       ?? '');
         $description = trim($_POST['description'] ?? '');
-        $due         = $_POST['due_datetime'] ?? '';
-        $assigned_to = !empty($_POST['user_id']) ? (int)$_POST['user_id'] : null;
+        $due         = $_POST['due_datetime']      ?? '';
+        $assigned_to = !empty($_POST['user_id'])
+                       ? (int)$_POST['user_id'] : null;
 
         if (empty($title) || empty($due)) {
             $save_error = "Title and due date are required.";
         } else {
             $pdo->prepare("
                 UPDATE tasks
-                SET title=?, description=?, due_datetime=?, user_id=?
+                SET title=?,description=?,due_datetime=?,user_id=?
                 WHERE id=? AND created_by=?
-            ")->execute([$title,$description,$due,$assigned_to,
-                          $task_id,$admin_id]);
+            ")->execute([
+                $title,$description,$due,
+                $assigned_to,$task_id,$admin_id
+            ]);
             header("Location: tasks.php?success=updated"); exit();
         }
     }
 }
 
-// ── LOAD TASK ─────────────────────────────────────────────
-$id = (int)($_GET['id'] ?? 0);
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['id'])) {
-    $id = (int)$_POST['id'];
-}
-
+$id = (int)($_GET['id'] ?? $_POST['id'] ?? 0);
 $stmt = $pdo->prepare("
-    SELECT t.*, ts.name as status,
-           u.email as assigned_email, u.username as assigned_name
+    SELECT t.*, ts.name AS status,
+           u.email AS assigned_email,
+           u.username AS assigned_name
     FROM tasks t
-    LEFT JOIN task_status ts ON t.status_id=ts.id
-    LEFT JOIN users u        ON t.user_id=u.id
+    LEFT JOIN task_status ts ON t.status_id = ts.id
+    LEFT JOIN users u ON t.user_id = u.id
     WHERE t.id=? AND t.created_by=?
 ");
 $stmt->execute([$id, $admin_id]);
-$task = $stmt->fetch(PDO::FETCH_ASSOC);
+$task = $stmt->fetch();
 if (!$task) { header("Location: tasks.php?error=notfound"); exit(); }
 
 $members = $pdo->query("
     SELECT id, email, username FROM users
     WHERE role_id=2 ORDER BY username, email
-")->fetchAll(PDO::FETCH_ASSOC);
+")->fetchAll();
 
 $is_done = ((int)$task['status_id'] === 3);
 $is_conf = ((int)$task['status_id'] === 2);
 
 $form = [
-    'title'       => $save_error ? ($_POST['title'] ?? $task['title'])
-                                 : $task['title'],
-    'description' => $save_error ? ($_POST['description'] ?? $task['description'])
-                                 : $task['description'],
-    'due_datetime'=> $save_error
-                        ? ($_POST['due_datetime'] ?? date('Y-m-d\TH:i',
-                              strtotime($task['due_datetime'])))
-                        : date('Y-m-d\TH:i', strtotime($task['due_datetime'])),
-    'user_id'     => $save_error ? ($_POST['user_id'] ?? $task['user_id'])
-                                 : $task['user_id'],
+    'title'        => $save_error
+                      ? ($_POST['title']??$task['title'])
+                      : $task['title'],
+    'description'  => $save_error
+                      ? ($_POST['description']??$task['description'])
+                      : $task['description'],
+    'due_datetime' => $save_error
+                      ? ($_POST['due_datetime']
+                         ??date('Y-m-d\TH:i',
+                             strtotime($task['due_datetime'])))
+                      : date('Y-m-d\TH:i',strtotime($task['due_datetime'])),
+    'user_id'      => $save_error
+                      ? ($_POST['user_id']??$task['user_id'])
+                      : $task['user_id'],
 ];
 
-// ── NOW output HTML ───────────────────────────────────────
+// HTML starts here
 require_once '../includes/header.php';
 ?>
 
@@ -105,28 +112,20 @@ require_once '../includes/header.php';
             </a>
             <span class="cm-breadcrumb-sep">/</span>
             <span class="cm-breadcrumb-current">
-                <?php echo $is_done ? 'View Task' : 'Edit Task'; ?>
+                <?php echo $is_done?'View Task':'Edit Task'; ?>
             </span>
         </div>
 
         <div class="cm-card">
             <div class="cm-card-header">
-                <div>
-                    <div class="cm-card-title">
-                        <?php echo $is_done ? 'View Completed Task' : 'Edit Task'; ?>
-                    </div>
-                    <div class="cm-card-subtitle">
-                        <?php echo $is_done
-                            ? 'Completed — view details or delete'
-                            : 'Update task details'; ?>
-                    </div>
+                <div class="cm-card-title">
+                    <?php echo $is_done?'View Completed Task':'Edit Task'; ?>
                 </div>
             </div>
             <div class="cm-card-body">
 
                 <?php if ($save_error): ?>
                 <div class="alert alert-danger mb-4">
-                    <i class="bi bi-exclamation-triangle me-2"></i>
                     <?php echo htmlspecialchars($save_error); ?>
                 </div>
                 <?php endif; ?>
@@ -139,9 +138,6 @@ require_once '../includes/header.php';
                             <div class="cm-notice-title">
                                 Awaiting Confirmation
                             </div>
-                            <div class="cm-notice-text">
-                                A member marked this task as done.
-                            </div>
                         </div>
                     </div>
                     <form method="POST" action="edit_task.php" class="mt-3">
@@ -149,32 +145,23 @@ require_once '../includes/header.php';
                         <input type="hidden" name="id"
                                value="<?php echo (int)$task['id']; ?>">
                         <button type="submit" class="cm-btn cm-btn-success">
-                            <i class="bi bi-patch-check me-1"></i>Mark Accomplished
+                            <i class="bi bi-patch-check me-1"></i>
+                            Mark Accomplished
                         </button>
                     </form>
                 </div>
                 <?php endif; ?>
 
                 <?php if ($is_done): ?>
-                <!-- VIEW MODE -->
                 <div class="row g-3 mb-4">
                     <div class="col-12">
-                        <div class="cm-detail-section-label">Title</div>
-                        <h4 class="fw-bold mt-1">
+                        <h4 class="fw-bold">
                             <?php echo htmlspecialchars($task['title']); ?>
                         </h4>
                     </div>
-                    <?php if ($task['description']): ?>
-                    <div class="col-12">
-                        <div class="cm-detail-section-label">Description</div>
-                        <p class="mt-1" style="white-space:pre-wrap">
-                            <?php echo htmlspecialchars($task['description']); ?>
-                        </p>
-                    </div>
-                    <?php endif; ?>
                     <div class="col-md-4">
                         <div class="cm-meta-cell">
-                            <div class="cm-meta-label">Due Date</div>
+                            <div class="cm-meta-label">Due</div>
                             <div class="cm-meta-value">
                                 <?php echo date('M j, Y H:i',
                                     strtotime($task['due_datetime'])); ?>
@@ -183,23 +170,12 @@ require_once '../includes/header.php';
                     </div>
                     <div class="col-md-4">
                         <div class="cm-meta-cell cm-meta-success">
-                            <div class="cm-meta-label">Completed On</div>
+                            <div class="cm-meta-label">Completed</div>
                             <div class="cm-meta-value text-success">
                                 <?php echo !empty($task['completed_at'])
-                                    ? date('M j, Y H:i',
+                                    ?date('M j, Y H:i',
                                         strtotime($task['completed_at']))
-                                    : '—'; ?>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="cm-meta-cell">
-                            <div class="cm-meta-label">Assigned To</div>
-                            <div class="cm-meta-value">
-                                <?php echo !empty($task['user_id'])
-                                    ? htmlspecialchars($task['assigned_name']
-                                        ?? $task['assigned_email'])
-                                    : 'Admin only'; ?>
+                                    :'—'; ?>
                             </div>
                         </div>
                     </div>
@@ -210,7 +186,8 @@ require_once '../includes/header.php';
                         <i class="bi bi-chevron-left me-1"></i>Back
                     </a>
                     <form method="POST" action="edit_task.php"
-                          onsubmit="return confirm('Delete this completed task?')">
+                          data-confirm="Delete this completed task?"
+                          data-confirm-type="danger">
                         <input type="hidden" name="action" value="delete">
                         <input type="hidden" name="id"
                                value="<?php echo (int)$task['id']; ?>">
@@ -221,12 +198,10 @@ require_once '../includes/header.php';
                 </div>
 
                 <?php else: ?>
-                <!-- EDIT MODE — single form, no nested forms -->
                 <form method="POST" action="edit_task.php">
                     <input type="hidden" name="action" value="save">
                     <input type="hidden" name="id"
                            value="<?php echo (int)$task['id']; ?>">
-
                     <div class="row g-4">
                         <div class="col-lg-8">
                             <div class="mb-4">
@@ -243,14 +218,17 @@ require_once '../includes/header.php';
                                           class="form-control"
                                           rows="5"><?php
                                     echo htmlspecialchars(
-                                        $form['description'] ?? '');
+                                        $form['description']??'');
                                 ?></textarea>
                             </div>
                         </div>
                         <div class="col-lg-4">
                             <div class="mb-4">
-                                <label class="form-label">Due Date & Time *</label>
-                                <input type="datetime-local" name="due_datetime"
+                                <label class="form-label">
+                                    Due Date & Time *
+                                </label>
+                                <input type="datetime-local"
+                                       name="due_datetime"
                                        class="form-control form-control-lg"
                                        required
                                        value="<?php echo htmlspecialchars(
@@ -263,38 +241,34 @@ require_once '../includes/header.php';
                                     <option value="">Admin only</option>
                                     <?php foreach ($members as $m): ?>
                                     <option value="<?php echo $m['id']; ?>"
-                                            <?php echo (int)$form['user_id']===(int)$m['id']
-                                                ?'selected':''; ?>>
+                                        <?php echo (int)$form['user_id']
+                                            ===(int)$m['id']
+                                            ?'selected':''; ?>>
                                         <?php echo htmlspecialchars(
-                                            $m['username'] ?? $m['email']); ?>
+                                            $m['username']??$m['email']); ?>
                                     </option>
                                     <?php endforeach; ?>
                                 </select>
                             </div>
-                            <div class="cm-meta-cell">
-                                <div class="cm-meta-label">Current Status</div>
-                                <span class="cm-status-badge cm-status-<?php
-                                    echo $is_conf?'confirm':'pending'; ?>">
-                                    <?php echo htmlspecialchars($task['status']); ?>
-                                </span>
-                            </div>
                         </div>
                     </div>
-
                     <hr style="margin:24px 0">
-                    <div class="d-flex justify-content-between flex-wrap gap-3">
-                        <a href="tasks.php" class="cm-btn cm-btn-ghost">Cancel</a>
+                    <div class="d-flex justify-content-between
+                                flex-wrap gap-3">
+                        <a href="tasks.php" class="cm-btn cm-btn-ghost">
+                            Cancel
+                        </a>
                         <button type="submit" class="cm-btn cm-btn-primary">
                             <i class="bi bi-save me-1"></i>Save Changes
                         </button>
                     </div>
                 </form>
-
-                <!-- Delete — separate form OUTSIDE edit form -->
                 <hr style="margin-top:16px">
                 <form method="POST" action="edit_task.php"
-                      onsubmit="return confirm('Delete \'<?php
-                          echo addslashes($task['title']); ?>\'?')">
+                      data-confirm="Delete '<?php
+                          echo htmlspecialchars(
+                              addslashes($task['title'])); ?>'?"
+                      data-confirm-type="danger">
                     <input type="hidden" name="action" value="delete">
                     <input type="hidden" name="id"
                            value="<?php echo (int)$task['id']; ?>">

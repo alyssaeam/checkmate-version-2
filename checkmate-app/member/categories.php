@@ -1,15 +1,15 @@
 <?php
-// ── POST LOGIC BEFORE ANY OUTPUT ─────────────────────────
-require_once '../config/database.php';
 session_start();
+require_once '../config/database.php';
 
 if (!isset($_SESSION['user_id'])) {
     header("Location: ../shared/login.php"); exit();
 }
-if ($_SESSION['role_id'] == 1) {
+if ((int)$_SESSION['role_id'] === 1) {
     header("Location: ../admin/home.php"); exit();
 }
 
+// ── POST LOGIC ───────────────────────────────────────────
 $member_id = (int)$_SESSION['user_id'];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -80,7 +80,7 @@ $preset_colors = [
     '#e83e8c','#6c757d','#343a40','#007bff'
 ];
 
-// ── NOW output HTML ───────────────────────────────────────
+// ── OUTPUT HTML ──────────────────────────────────────────
 require_once '../includes/header.php';
 ?>
 
@@ -129,8 +129,7 @@ require_once '../includes/header.php';
                     <div class="d-flex align-items-center gap-3">
                         <div style="width:40px;height:40px;
                                     border-radius:8px;
-                                    background:<?php echo htmlspecialchars(
-                                        $cat['color']); ?>;
+                                    background:<?php echo htmlspecialchars($cat['color']); ?>;
                                     flex-shrink:0"></div>
                         <div>
                             <div style="font-size:14px;font-weight:600;
@@ -170,7 +169,6 @@ require_once '../includes/header.php';
 </div>
 <?php endif; ?>
 
-<!-- Edit category modal -->
 <?php if ($edit_cat): ?>
 <script>
 document.addEventListener('DOMContentLoaded',function(){
@@ -193,8 +191,7 @@ document.addEventListener('DOMContentLoaded',function(){
                         <label class="form-label">Category Name</label>
                         <input type="text" name="name"
                                class="form-control" required
-                               value="<?php echo htmlspecialchars(
-                                   $edit_cat['name']); ?>">
+                               value="<?php echo htmlspecialchars($edit_cat['name']); ?>">
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Color</label>
@@ -213,8 +210,7 @@ document.addEventListener('DOMContentLoaded',function(){
                         </div>
                         <input type="color" name="color" id="edit_color"
                                class="form-control form-control-color"
-                               value="<?php echo htmlspecialchars(
-                                   $edit_cat['color']); ?>"
+                               value="<?php echo htmlspecialchars($edit_cat['color']); ?>"
                                style="max-width:60px">
                     </div>
                 </div>
@@ -230,7 +226,6 @@ document.addEventListener('DOMContentLoaded',function(){
 </div>
 <?php endif; ?>
 
-<!-- Create category modal -->
 <div class="modal fade" id="createCatModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">

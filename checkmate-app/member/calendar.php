@@ -1,8 +1,15 @@
 <?php
-require_once '../includes/header.php'; requireLogin();
+session_start();
 require_once '../config/database.php';
-if (isAdmin()) { header("Location: ../admin/calendar.php"); exit(); }
 
+if (!isset($_SESSION['user_id'])) {
+    header("Location: ../shared/login.php"); exit();
+}
+if ((int)$_SESSION['role_id'] === 1) {
+    header("Location: ../admin/home.php"); exit();
+}
+
+// ── DATA LOGIC ───────────────────────────────────────────
 $member_id      = $_SESSION['user_id'];
 $month          = isset($_GET['month']) ? (int)$_GET['month'] : (int)date('n');
 $year           = isset($_GET['year'])  ? (int)$_GET['year']  : (int)date('Y');
@@ -61,6 +68,9 @@ $today         = date('Y-m-d');
 $months_list   = ['January','February','March','April','May','June',
                   'July','August','September','October','November','December'];
 $years_list    = range(2020,2035);
+
+// ── OUTPUT HTML ──────────────────────────────────────────
+require_once '../includes/header.php';
 ?>
 
 <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-3">
@@ -186,7 +196,6 @@ $years_list    = range(2020,2035);
         </div>
     </div>
 
-    <!-- Task list -->
     <div class="col-lg-5">
         <div class="cm-card" style="height:100%">
             <div class="cm-card-header">

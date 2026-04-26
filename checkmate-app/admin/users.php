@@ -1,15 +1,18 @@
 <?php
-// ── POST LOGIC BEFORE ANY OUTPUT ─────────────────────────
-require_once '../config/database.php';
 session_start();
+require_once '../config/database.php';
 
-if (!isset($_SESSION['user_id']) || $_SESSION['role_id'] != 1) {
+if (!isset($_SESSION['user_id'])) {
     header("Location: ../shared/login.php"); exit();
+}
+if ((int)$_SESSION['role_id'] !== 1) {
+    header("Location: ../member/home.php"); exit();
 }
 
 $admin_id = (int)$_SESSION['user_id'];
 $search   = trim($_GET['search'] ?? '');
 
+// All POST before HTML
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_member'])) {
     $username     = trim($_POST['new_username'] ?? '');
     $email        = trim($_POST['new_email']    ?? '');
@@ -20,36 +23,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_member'])) {
         header("Location: users.php?error=email_exists"); exit();
     }
     $pdo->prepare("
-        INSERT INTO users (username,email,password,role_id,must_change_password)
+        INSERT INTO users
+            (username,email,password,role_id,must_change_password)
         VALUES (?,?,?,2,1)
     ")->execute([$username,$email,$tmp_password]);
     header("Location: users.php?success=member_added"); exit();
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['remove_member'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST'
+    && isset($_POST['reset_password'])) {
+    $uid = (int)$_POST['user_id'];
+    if ($uid !== $admin_id) {
+        $tmp = password_hash('checkmate123', PASSWORD_BCRYPT);
+        $pdo->prepare("
+            UPDATE users SET password=?, must_change_password=1
+            WHERE id=? AND role_id=2
+        ")->execute([$tmp, $uid]);
+    }
+    header("Location: users.php?success=password_reset&uid=$uid");
+    exit();
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST'
+    && isset($_POST['remove_member'])) {
     $uid  = (int)$_POST['user_id'];
     $pass = $_POST['admin_password'] ?? '';
-    if ($uid===$admin_id) {
+    if ($uid === $admin_id) {
         header("Location: users.php?error=cannot_remove_self"); exit();
     }
     $row = $pdo->prepare("SELECT password FROM users WHERE id=?");
     $row->execute([$admin_id]);
-    $row = $row->fetch(PDO::FETCH_ASSOC);
+    $row = $row->fetch();
     if (!password_verify($pass,$row['password'])) {
         header("Location: users.php?error=wrong_password&uid=$uid"); exit();
     }
-    $pdo->prepare("UPDATE tasks SET user_id=NULL WHERE user_id=?")->execute([$uid]);
-    $pdo->prepare("DELETE FROM tasks WHERE created_by=? AND is_private=1")->execute([$uid]);
-    $pdo->prepare("DELETE FROM task_categories WHERE user_id=?")->execute([$uid]);
-    $pdo->prepare("DELETE FROM users WHERE id=? AND role_id=2")->execute([$uid]);
+    $pdo->prepare("UPDATE tasks SET user_id=NULL WHERE user_id=?")
+        ->execute([$uid]);
+    $pdo->prepare("DELETE FROM tasks WHERE created_by=? AND is_private=1")
+        ->execute([$uid]);
+    $pdo->prepare("DELETE FROM task_categories WHERE user_id=?")
+        ->execute([$uid]);
+    $pdo->prepare("DELETE FROM users WHERE id=? AND role_id=2")
+        ->execute([$uid]);
     header("Location: users.php?success=member_removed"); exit();
 }
 
-// ── LOAD DATA ─────────────────────────────────────────────
-if ($search!=='') {
+// Load data
+if ($search !== '') {
     $us = $pdo->prepare("
         SELECT u.*,
-               (SELECT COUNT(*) FROM tasks WHERE user_id=u.id) as task_count
+               (SELECT COUNT(*) FROM tasks WHERE user_id=u.id) AS task_count
         FROM users u
         WHERE u.role_id=2 AND u.id!=?
           AND (u.username LIKE ? OR u.email LIKE ?)
@@ -59,14 +82,14 @@ if ($search!=='') {
 } else {
     $us = $pdo->prepare("
         SELECT u.*,
-               (SELECT COUNT(*) FROM tasks WHERE user_id=u.id) as task_count
+               (SELECT COUNT(*) FROM tasks WHERE user_id=u.id) AS task_count
         FROM users u
         WHERE u.role_id=2 AND u.id!=?
         ORDER BY u.username ASC, u.email ASC
     ");
     $us->execute([$admin_id]);
 }
-$users = $us->fetchAll(PDO::FETCH_ASSOC);
+$users = $us->fetchAll();
 
 $view_uid   = isset($_GET['uid']) ? (int)$_GET['uid'] : null;
 $view_user  = null;
@@ -79,7 +102,7 @@ if ($view_uid) {
         WHERE u.id=?
     ");
     $s->execute([$view_uid]);
-    $view_user = $s->fetch(PDO::FETCH_ASSOC);
+    $view_user = $s->fetch();
 
     if ($view_user) {
         $ut = $pdo->prepare("
@@ -92,18 +115,20 @@ if ($view_uid) {
                 t.due_datetime ASC
         ");
         $ut->execute([$view_uid]);
-        $user_tasks = $ut->fetchAll(PDO::FETCH_ASSOC);
+        $user_tasks = $ut->fetchAll();
     }
 }
 
 $member_count = (int)$pdo->query(
-    "SELECT COUNT(*) FROM users WHERE role_id=2")->fetchColumn();
+    "SELECT COUNT(*) FROM users WHERE role_id=2"
+)->fetchColumn();
 
-// ── NOW output HTML ───────────────────────────────────────
+// HTML starts here
 require_once '../includes/header.php';
 ?>
 
-<div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-3">
+<div class="d-flex align-items-center
+            justify-content-between mb-4 flex-wrap gap-3">
     <div>
         <h1 class="page-title">Users</h1>
         <p class="page-subtitle">
@@ -112,7 +137,8 @@ require_once '../includes/header.php';
         </p>
     </div>
     <button class="cm-btn cm-btn-primary"
-            data-bs-toggle="modal" data-bs-target="#addMemberModal">
+            data-bs-toggle="modal"
+            data-bs-target="#addMemberModal">
         <i class="bi bi-person-plus me-1"></i>Add Member
     </button>
 </div>
@@ -123,9 +149,11 @@ require_once '../includes/header.php';
     <?php echo match($_GET['success']){
         'member_added'   =>'Member added. Temporary password: <strong>checkmate123</strong>',
         'member_removed' =>'Member removed.',
+        'password_reset' =>'Password reset to <strong>checkmate123</strong>. Member must change on next login.',
         default          =>'Done.'
     }; ?>
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    <button type="button" class="btn-close"
+            data-bs-dismiss="alert"></button>
 </div>
 <?php endif; ?>
 
@@ -138,19 +166,20 @@ require_once '../includes/header.php';
         'cannot_remove_self' =>'Cannot remove your own account.',
         default              =>'An error occurred.'
     }; ?>
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    <button type="button" class="btn-close"
+            data-bs-dismiss="alert"></button>
 </div>
 <?php endif; ?>
 
 <div class="row g-4">
-    <!-- Member list -->
     <div class="col-lg-4">
         <div class="cm-card"
              style="display:flex;flex-direction:column;height:100%">
             <div class="cm-card-header" style="flex-shrink:0">
                 <span class="cm-card-title">All Members</span>
             </div>
-            <div style="padding:10px 14px;border-bottom:1px solid var(--border);
+            <div style="padding:10px 14px;
+                        border-bottom:1px solid var(--border);
                         flex-shrink:0">
                 <form method="GET"
                       style="display:flex;gap:6px;align-items:center">
@@ -187,9 +216,9 @@ require_once '../includes/header.php';
                 <?php else: ?>
                 <div class="cm-list">
                     <?php foreach ($users as $u):
-                        $uname  =$u['username']??explode('@',$u['email'])[0];
-                        $init   =strtoupper(substr($uname,0,2));
-                        $is_sel =((int)$view_uid===(int)$u['id']);
+                        $uname=($u['username']??explode('@',$u['email'])[0]);
+                        $init=strtoupper(substr($uname,0,2));
+                        $is_sel=((int)$view_uid===(int)$u['id']);
                     ?>
                     <a href="users.php?uid=<?php echo (int)$u['id'];
                         echo $search?'&search='.urlencode($search):''; ?>"
@@ -206,10 +235,19 @@ require_once '../includes/header.php';
                                 <?php echo htmlspecialchars($u['email']); ?>
                             </div>
                         </div>
-                        <span class="cm-tag cm-tag-neutral"
-                              style="font-size:10px;white-space:nowrap">
-                            <?php echo (int)$u['task_count']; ?> tasks
-                        </span>
+                        <div style="display:flex;flex-direction:column;
+                                    align-items:flex-end;gap:3px">
+                            <span class="cm-tag cm-tag-neutral"
+                                  style="font-size:10px">
+                                <?php echo (int)$u['task_count']; ?> tasks
+                            </span>
+                            <?php if ((int)$u['must_change_password']): ?>
+                            <span class="cm-tag cm-tag-warning"
+                                  style="font-size:9px">
+                                Temp pwd
+                            </span>
+                            <?php endif; ?>
+                        </div>
                     </a>
                     <?php endforeach; ?>
                 </div>
@@ -218,19 +256,19 @@ require_once '../includes/header.php';
         </div>
     </div>
 
-    <!-- Member detail -->
     <div class="col-lg-8">
         <?php if ($view_user):
             $vname=($view_user['username']??explode('@',$view_user['email'])[0]);
             $vinit=strtoupper(substr($vname,0,2));
+            $must=(int)($view_user['must_change_password']??0);
         ?>
         <div class="cm-card">
             <div class="cm-card-header">
                 <div style="display:flex;align-items:center;
                              gap:12px;flex:1;min-width:0">
                     <div class="sidebar-avatar"
-                         style="width:40px;height:40px;font-size:14px;
-                                flex-shrink:0">
+                         style="width:40px;height:40px;
+                                font-size:14px;flex-shrink:0">
                         <?php echo htmlspecialchars($vinit); ?>
                     </div>
                     <div style="min-width:0">
@@ -242,11 +280,56 @@ require_once '../includes/header.php';
                         </div>
                     </div>
                 </div>
-                <span class="cm-tag cm-tag-success">Member</span>
+                <div style="display:flex;align-items:center;gap:6px">
+                    <span class="cm-tag cm-tag-success">Member</span>
+                    <?php if ($must): ?>
+                    <span class="cm-tag cm-tag-warning">
+                        <i class="bi bi-exclamation-triangle me-1"></i>
+                        Temp Password
+                    </span>
+                    <?php endif; ?>
+                </div>
             </div>
             <div class="cm-card-body">
 
-                <!-- Remove -->
+                <div class="cm-notice cm-notice-info mb-4"
+                     style="border-color:#93c5fd">
+                    <div class="cm-notice-body">
+                        <i class="bi bi-key cm-notice-icon"
+                           style="color:var(--info);font-size:18px;
+                                  flex-shrink:0"></i>
+                        <div>
+                            <div class="cm-notice-title">
+                                Reset Member Password
+                            </div>
+                            <div class="cm-notice-text">
+                                Resets to
+                                <code style="background:#e0e7ff;
+                                             padding:1px 6px;
+                                             border-radius:3px;
+                                             font-size:11px">
+                                    checkmate123
+                                </code>
+                                and flags account to require change on
+                                next login.
+                            </div>
+                        </div>
+                    </div>
+                    <form method="POST" class="mt-3"
+                          data-confirm="Reset password for <?php
+                              echo htmlspecialchars(addslashes($vname)); ?>?"
+                          data-confirm-type="warning">
+                        <input type="hidden" name="reset_password" value="1">
+                        <input type="hidden" name="user_id"
+                               value="<?php echo (int)$view_user['id']; ?>">
+                        <button type="submit"
+                                class="cm-btn cm-btn-ghost cm-btn-sm">
+                            <i class="bi bi-arrow-counterclockwise me-1"></i>
+                            Reset to Default Password
+                        </button>
+                    </form>
+                </div>
+
                 <div class="cm-notice cm-notice-danger mb-4">
                     <div class="cm-notice-body">
                         <i class="bi bi-person-x cm-notice-icon"
@@ -254,14 +337,15 @@ require_once '../includes/header.php';
                         <div>
                             <div class="cm-notice-title">Remove Member</div>
                             <div class="cm-notice-text">
-                                Permanently removes this member, unassigns
-                                their tasks and deletes their private tasks.
+                                Permanently removes member, unassigns tasks,
+                                deletes private tasks.
                             </div>
                         </div>
                     </div>
                     <form method="POST" class="mt-3"
-                          onsubmit="return confirm('Remove <?php
-                              echo addslashes($vname); ?>?')">
+                          data-confirm="Remove <?php
+                              echo htmlspecialchars(addslashes($vname)); ?>?"
+                          data-confirm-type="danger">
                         <input type="hidden" name="remove_member" value="1">
                         <input type="hidden" name="user_id"
                                value="<?php echo (int)$view_user['id']; ?>">
@@ -269,8 +353,9 @@ require_once '../includes/header.php';
                                     align-items:flex-end;flex-wrap:wrap">
                             <input type="password" name="admin_password"
                                    class="form-control form-control-sm"
-                                   placeholder="Admin password to confirm"
-                                   required style="max-width:240px;flex:1">
+                                   placeholder="Confirm with admin password"
+                                   required
+                                   style="max-width:260px;flex:1">
                             <button type="submit"
                                     class="cm-btn cm-btn-danger cm-btn-sm">
                                 <i class="bi bi-trash me-1"></i>Remove
@@ -279,9 +364,9 @@ require_once '../includes/header.php';
                     </form>
                 </div>
 
-                <!-- Tasks -->
                 <div style="display:flex;align-items:center;
-                             justify-content:space-between;margin-bottom:12px">
+                             justify-content:space-between;
+                             margin-bottom:12px">
                     <div class="cm-card-title">Assigned Tasks</div>
                     <span class="cm-tag cm-tag-neutral">
                         <?php echo count($user_tasks); ?>
@@ -335,23 +420,29 @@ require_once '../includes/header.php';
                 <?php endif; ?>
             </div>
         </div>
+
         <?php else: ?>
         <div class="cm-card" style="min-height:300px">
             <div class="cm-empty-state" style="min-height:260px">
                 <i class="bi bi-person-circle cm-empty-icon"></i>
-                <p class="cm-empty-text">Select a member to view details</p>
+                <p class="cm-empty-text">
+                    Select a member to view details
+                </p>
             </div>
         </div>
         <?php endif; ?>
     </div>
 </div>
 
-<!-- Add member modal -->
 <div class="modal fade" id="addMemberModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Add New Member</h5>
+                <h5 class="modal-title">
+                    <i class="bi bi-person-plus me-2"
+                       style="color:var(--primary)"></i>
+                    Add New Member
+                </h5>
                 <button type="button" class="btn-close"
                         data-bs-dismiss="modal"></button>
             </div>
@@ -372,8 +463,11 @@ require_once '../includes/header.php';
                     </div>
                     <div class="alert alert-info mb-0">
                         <i class="bi bi-info-circle me-2"></i>
-                        Temporary password: <strong>checkmate123</strong><br>
-                        <small>Advise the member to change it after first login.</small>
+                        Temporary password:
+                        <strong>checkmate123</strong><br>
+                        <small>
+                            Member will be prompted to change it on first login.
+                        </small>
                     </div>
                 </div>
                 <div class="modal-footer">

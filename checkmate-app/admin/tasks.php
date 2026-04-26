@@ -1,19 +1,19 @@
 <?php
-// ── ALL POST LOGIC FIRST — before any output ──────────────
-require_once '../config/database.php';
 session_start();
+require_once '../config/database.php';
 
-if (!isset($_SESSION['user_id']) || $_SESSION['role_id'] != 1) {
+// Auth check before any output
+if (!isset($_SESSION['user_id'])) {
     header("Location: ../shared/login.php"); exit();
+}
+if ((int)$_SESSION['role_id'] !== 1) {
+    header("Location: ../member/home.php"); exit();
 }
 
 $admin_id = (int)$_SESSION['user_id'];
 $filter   = $_GET['filter'] ?? 'all';
 $per_page = 10;
 $page     = max(1, (int)($_GET['page'] ?? 1));
-
-// ── NOW load header (outputs HTML) ────────────────────────
-require_once '../includes/header.php';
 
 $conditions = ["t.created_by = ?"];
 $params     = [$admin_id];
@@ -32,7 +32,7 @@ $page        = min($page, $total_pages);
 $offset      = ($page - 1) * $per_page;
 
 $fetch_sql = "
-    SELECT t.*, ts.name as status
+    SELECT t.*, ts.name AS status
     FROM tasks t
     LEFT JOIN task_status ts ON t.status_id = ts.id
     $where
@@ -43,17 +43,20 @@ $fetch_sql = "
 ";
 $stmt = $pdo->prepare($fetch_sql);
 $stmt->execute($params);
-$tasks = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$tasks = $stmt->fetchAll();
 
 $users_by_id = [];
 if (!empty($tasks)) {
-    $uid_list = array_filter(array_unique(array_column($tasks, 'user_id')));
+    $uid_list = array_filter(
+        array_unique(array_column($tasks, 'user_id'))
+    );
     if (!empty($uid_list)) {
         $ph = implode(',', array_fill(0, count($uid_list), '?'));
         $u_stmt = $pdo->prepare(
-            "SELECT id, username, email FROM users WHERE id IN ($ph)");
+            "SELECT id, username, email FROM users WHERE id IN ($ph)"
+        );
         $u_stmt->execute(array_values($uid_list));
-        foreach ($u_stmt->fetchAll(PDO::FETCH_ASSOC) as $u) {
+        foreach ($u_stmt->fetchAll() as $u) {
             $users_by_id[$u['id']] = $u;
         }
     }
@@ -61,21 +64,25 @@ if (!empty($tasks)) {
 
 $tab_stmt = $pdo->prepare("
     SELECT
-        COUNT(*)                                           as total,
-        SUM(CASE WHEN t.user_id IS NOT NULL THEN 1 END)   as assigned,
-        SUM(CASE WHEN t.status_id = 2       THEN 1 END)   as confirm,
-        SUM(CASE WHEN t.status_id = 3       THEN 1 END)   as done
-    FROM tasks t WHERE t.created_by = ?
+        COUNT(*) AS total,
+        SUM(CASE WHEN user_id IS NOT NULL THEN 1 END) AS assigned,
+        SUM(CASE WHEN status_id = 2       THEN 1 END) AS confirm,
+        SUM(CASE WHEN status_id = 3       THEN 1 END) AS done
+    FROM tasks WHERE created_by = ?
 ");
 $tab_stmt->execute([$admin_id]);
-$counts = $tab_stmt->fetch(PDO::FETCH_ASSOC);
+$counts = $tab_stmt->fetch();
 
 function adminTaskPageUrl($f, $p) {
     return '?filter='.urlencode($f).'&page='.(int)$p;
 }
+
+// ── HTML output starts here ───────────────────────────────
+require_once '../includes/header.php';
 ?>
 
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex justify-content-between
+            align-items-center mb-4 flex-wrap gap-3">
     <div>
         <h1 class="page-title">Tasks</h1>
         <div class="d-flex gap-2 mt-1 flex-wrap">
@@ -105,11 +112,12 @@ function adminTaskPageUrl($f, $p) {
         'confirmed' => 'Task marked as Completed!',
         default     => 'Done!'
     }; ?>
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    <button type="button" class="btn-close"
+            data-bs-dismiss="alert"></button>
 </div>
 <?php endif; ?>
 
-<ul class="nav nav-pills mb-4">
+<ul class="nav nav-pills mb-4 flex-wrap">
     <?php
     $tabs = [
         'all'      => ['All',              (int)$counts['total'],    'secondary'],
@@ -120,7 +128,7 @@ function adminTaskPageUrl($f, $p) {
     foreach ($tabs as $key => [$label, $count, $color]): ?>
     <li class="nav-item">
         <a class="nav-link <?php echo $filter===$key?'active':''; ?>"
-           href="<?php echo adminTaskPageUrl($key,1); ?>">
+           href="<?php echo adminTaskPageUrl($key, 1); ?>">
             <?php echo $label; ?>
             <span class="badge ms-1 bg-<?php
                 echo $filter===$key?'light text-dark':$color; ?>">
@@ -152,7 +160,8 @@ function adminTaskPageUrl($f, $p) {
             <tbody>
                 <?php foreach ($tasks as $task):
                     $assignee = null;
-                    if (!empty($task['user_id']) && isset($users_by_id[$task['user_id']])) {
+                    if (!empty($task['user_id'])
+                        && isset($users_by_id[$task['user_id']])) {
                         $assignee = $users_by_id[$task['user_id']];
                     }
                 ?>
@@ -169,11 +178,10 @@ function adminTaskPageUrl($f, $p) {
                         <?php endif; ?>
                     </td>
                     <td>
-                        <span class="<?php
+                        <span style="font-size:12px" class="<?php
                             echo strtotime($task['due_datetime'])<time()
                               && (int)$task['status_id']!==3
-                              ? 'text-danger fw-bold' : ''; ?>"
-                              style="font-size:12px">
+                              ? 'text-danger fw-bold':''; ?>">
                             <?php echo date('M j, Y',
                                 strtotime($task['due_datetime'])); ?>
                             <br>
@@ -183,9 +191,9 @@ function adminTaskPageUrl($f, $p) {
                     </td>
                     <td>
                         <span class="cm-status-badge cm-status-<?php
-                            echo $task['status']==='Completed' ? 'done'
-                                : ($task['status']==='For Confirmation'
-                                    ? 'confirm' : 'pending'); ?>">
+                            echo $task['status']==='Completed'?'done'
+                                :($task['status']==='For Confirmation'
+                                    ?'confirm':'pending'); ?>">
                             <?php echo htmlspecialchars($task['status']); ?>
                         </span>
                     </td>
@@ -193,7 +201,7 @@ function adminTaskPageUrl($f, $p) {
                         <?php if ($assignee): ?>
                         <span class="cm-tag cm-tag-info">
                             <?php echo htmlspecialchars(
-                                $assignee['username'] ?? $assignee['email']); ?>
+                                $assignee['username']??$assignee['email']); ?>
                         </span>
                         <?php else: ?>
                         <span class="cm-tag cm-tag-neutral">Admin only</span>
@@ -211,20 +219,24 @@ function adminTaskPageUrl($f, $p) {
                                 </button>
                             </form>
                             <?php endif; ?>
-                            <a href="task_detail.php?id=<?php echo (int)$task['id'];
+                            <a href="task_detail.php?id=<?php
+                                    echo (int)$task['id'];
                                 ?>&from=<?php echo urlencode($filter); ?>"
                                class="cm-icon-btn" title="View">
                                 <i class="bi bi-eye"></i>
                             </a>
                             <?php if ((int)$task['status_id']!==3): ?>
-                            <a href="edit_task.php?id=<?php echo (int)$task['id']; ?>"
+                            <a href="edit_task.php?id=<?php
+                                    echo (int)$task['id']; ?>"
                                class="cm-icon-btn" title="Edit">
                                 <i class="bi bi-pencil"></i>
                             </a>
                             <?php endif; ?>
                             <form method="POST" action="edit_task.php"
-                                  onsubmit="return confirm('Delete \'<?php
-                                      echo addslashes($task['title']); ?>\'?')">
+                                  data-confirm="Delete '<?php
+                                      echo htmlspecialchars(
+                                          addslashes($task['title'])); ?>'?"
+                                  data-confirm-type="danger">
                                 <input type="hidden" name="action" value="delete">
                                 <input type="hidden" name="id"
                                        value="<?php echo (int)$task['id']; ?>">
@@ -254,7 +266,7 @@ function adminTaskPageUrl($f, $p) {
                 &laquo; Prev
             </a>
         </li>
-        <?php for ($i=1;$i<=$total_pages;$i++): ?>
+        <?php for($i=1;$i<=$total_pages;$i++): ?>
         <li class="page-item <?php echo $i===$page?'active':''; ?>">
             <a class="page-link"
                href="<?php echo adminTaskPageUrl($filter,$i); ?>">
@@ -269,10 +281,6 @@ function adminTaskPageUrl($f, $p) {
             </a>
         </li>
     </ul>
-    <p class="text-center text-muted small">
-        Page <?php echo $page; ?> of <?php echo $total_pages; ?>
-        (<?php echo $total_rows; ?> tasks)
-    </p>
 </nav>
 <?php endif; ?>
 

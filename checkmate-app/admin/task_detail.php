@@ -1,17 +1,19 @@
 <?php
-// ── POST LOGIC BEFORE ANY OUTPUT ─────────────────────────
-require_once '../config/database.php';
 session_start();
+require_once '../config/database.php';
 
-if (!isset($_SESSION['user_id']) || $_SESSION['role_id'] != 1) {
+if (!isset($_SESSION['user_id'])) {
     header("Location: ../shared/login.php"); exit();
+}
+if ((int)$_SESSION['role_id'] !== 1) {
+    header("Location: ../member/home.php"); exit();
 }
 
 $admin_id = (int)$_SESSION['user_id'];
 $task_id  = (int)($_GET['id'] ?? 0);
-
 if (!$task_id) { header("Location: tasks.php"); exit(); }
 
+// POST before HTML
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
     if ($action === 'confirm') {
@@ -37,31 +39,34 @@ $stmt = $pdo->prepare("
            u.username AS assigned_name,
            u.email    AS assigned_email
     FROM tasks t
-    LEFT JOIN task_status ts ON t.status_id=ts.id
-    LEFT JOIN users u        ON t.user_id=u.id
+    LEFT JOIN task_status ts ON t.status_id = ts.id
+    LEFT JOIN users u ON t.user_id = u.id
     WHERE t.id=? AND t.created_by=?
     LIMIT 1
 ");
 $stmt->execute([$task_id, $admin_id]);
-$task = $stmt->fetch(PDO::FETCH_ASSOC);
+$task = $stmt->fetch();
 if (!$task) { header("Location: tasks.php?error=notfound"); exit(); }
 
-$sid     = (int)($task['status_id_val'] ?? $task['status_id']);
-$is_done = ($sid===3);
-$is_conf = ($sid===2);
-$is_over = !$is_done && !$is_conf && strtotime($task['due_datetime'])<time();
-$diff    = strtotime($task['due_datetime'])-time();
-$from    = htmlspecialchars($_GET['from'] ?? 'all');
+$sid          = (int)($task['status_id_val'] ?? $task['status_id']);
+$is_done      = ($sid===3);
+$is_conf      = ($sid===2);
+$is_over      = !$is_done && !$is_conf
+                && strtotime($task['due_datetime'])<time();
+$diff         = strtotime($task['due_datetime'])-time();
+$from         = htmlspecialchars($_GET['from']??'all');
+$status_label = match($sid){
+    1=>'Pending',2=>'For Confirmation',3=>'Completed',default=>'Unknown'};
+$status_cls   = match($sid){
+    1=>'pending',2=>'confirm',3=>'done',default=>'pending'};
 
-$status_label = match($sid){1=>'Pending',2=>'For Confirmation',3=>'Completed',default=>'Unknown'};
-$status_cls   = match($sid){1=>'pending',2=>'confirm',3=>'done',default=>'pending'};
-
-// ── NOW output HTML ───────────────────────────────────────
+// HTML starts here
 require_once '../includes/header.php';
 ?>
 
 <div class="cm-breadcrumb mb-4">
-    <a href="tasks.php?filter=<?php echo $from; ?>" class="cm-breadcrumb-link">
+    <a href="tasks.php?filter=<?php echo $from; ?>"
+       class="cm-breadcrumb-link">
         <i class="bi bi-chevron-left me-1"></i>Tasks
     </a>
     <span class="cm-breadcrumb-sep">/</span>
@@ -71,7 +76,8 @@ require_once '../includes/header.php';
 <?php if (isset($_GET['success'])): ?>
 <div class="alert alert-success alert-dismissible fade show mb-4">
     <i class="bi bi-check-circle me-2"></i>Task marked as Completed.
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    <button type="button" class="btn-close"
+            data-bs-dismiss="alert"></button>
 </div>
 <?php endif; ?>
 
@@ -89,7 +95,7 @@ require_once '../includes/header.php';
                         <i class="bi bi-person me-1"></i>
                         Assigned to
                         <?php echo htmlspecialchars(
-                            $task['assigned_name'] ?? $task['assigned_email']); ?>
+                            $task['assigned_name']??$task['assigned_email']); ?>
                     </span>
                     <?php else: ?>
                     <span class="cm-tag cm-tag-muted">Unassigned</span>
@@ -99,15 +105,15 @@ require_once '../includes/header.php';
                     <?php echo htmlspecialchars($task['title']); ?>
                 </h2>
             </div>
-            <span class="cm-status-badge cm-status-<?php echo $status_cls; ?>
-                         cm-status-lg">
+            <span class="cm-status-badge cm-status-<?php
+                    echo $status_cls; ?> cm-status-lg">
                 <?php echo $status_label; ?>
             </span>
         </div>
 
         <?php if ($is_conf): ?>
         <div class="cm-notice cm-notice-warning"
-             style="margin:16px 24px 0;border-radius:var(--radius-sm)">
+             style="margin:16px 24px 0">
             <div class="cm-notice-body">
                 <i class="bi bi-hourglass-split cm-notice-icon"></i>
                 <div>
@@ -143,38 +149,45 @@ require_once '../includes/header.php';
                         <i class="bi bi-calendar-event me-1"></i>Due Date
                     </div>
                     <div class="cm-meta-value">
-                        <?php echo date('F j, Y',strtotime($task['due_datetime'])); ?>
+                        <?php echo date('F j, Y',
+                            strtotime($task['due_datetime'])); ?>
                     </div>
                     <div class="cm-meta-sub">
-                        <?php echo date('g:i A',strtotime($task['due_datetime'])); ?>
+                        <?php echo date('g:i A',
+                            strtotime($task['due_datetime'])); ?>
                     </div>
                 </div>
 
                 <div class="cm-meta-cell <?php
-                    echo $is_done?'cm-meta-success':($is_over?'cm-meta-danger':''); ?>">
+                        echo $is_done?'cm-meta-success'
+                            :($is_over?'cm-meta-danger':''); ?>">
                     <?php if ($is_done): ?>
                     <div class="cm-meta-label">
                         <i class="bi bi-check-circle me-1"></i>Completed On
                     </div>
                     <div class="cm-meta-value text-success">
                         <?php echo !empty($task['completed_at'])
-                            ? date('F j, Y',strtotime($task['completed_at'])):'—'; ?>
+                            ?date('F j, Y',strtotime($task['completed_at']))
+                            :'—'; ?>
                     </div>
                     <div class="cm-meta-sub">
                         <?php echo !empty($task['completed_at'])
-                            ? date('g:i A',strtotime($task['completed_at'])):''; ?>
+                            ?date('g:i A',strtotime($task['completed_at']))
+                            :''; ?>
                     </div>
                     <?php elseif ($is_over): ?>
                     <div class="cm-meta-label text-danger">
                         <i class="bi bi-exclamation-triangle me-1"></i>Overdue
                     </div>
                     <?php
-                    $ago=$diff<0?abs($diff):0;
-                    $d=floor($ago/86400); $h=floor(($ago%86400)/3600);
+                    $ago=abs($diff);
+                    $d=floor($ago/86400);
+                    $h=floor(($ago%86400)/3600);
                     ?>
                     <div class="cm-meta-value text-danger">
-                        <?php echo $d>0?"$d day".($d>1?'s':'')." ago"
-                                       :"$h hour".($h>1?'s':'')." ago"; ?>
+                        <?php echo $d>0
+                            ?"$d day".($d>1?'s':'')." ago"
+                            :"$h hour".($h>1?'s':'')." ago"; ?>
                     </div>
                     <?php else: ?>
                     <div class="cm-meta-label">
@@ -201,8 +214,9 @@ require_once '../includes/header.php';
                     </div>
                     <div class="cm-meta-value">
                         <?php echo !empty($task['user_id'])
-                            ? htmlspecialchars($task['assigned_name']??$task['assigned_email'])
-                            : 'Admin only'; ?>
+                            ?htmlspecialchars(
+                                $task['assigned_name']??$task['assigned_email'])
+                            :'Admin only'; ?>
                     </div>
                 </div>
 
@@ -211,10 +225,12 @@ require_once '../includes/header.php';
                         <i class="bi bi-clock-history me-1"></i>Created On
                     </div>
                     <div class="cm-meta-value">
-                        <?php echo date('M j, Y',strtotime($task['created_at'])); ?>
+                        <?php echo date('M j, Y',
+                            strtotime($task['created_at'])); ?>
                     </div>
                     <div class="cm-meta-sub">
-                        <?php echo date('g:i A',strtotime($task['created_at'])); ?>
+                        <?php echo date('g:i A',
+                            strtotime($task['created_at'])); ?>
                     </div>
                 </div>
             </div>
@@ -233,7 +249,8 @@ require_once '../includes/header.php';
                 </a>
                 <?php endif; ?>
                 <form method="POST"
-                      onsubmit="return confirm('Delete this task permanently?')">
+                      data-confirm="Delete this task permanently?"
+                      data-confirm-type="danger">
                     <input type="hidden" name="action" value="delete">
                     <button type="submit" class="cm-btn cm-btn-danger">
                         <i class="bi bi-trash me-1"></i>Delete
