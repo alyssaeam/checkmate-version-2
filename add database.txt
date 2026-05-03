@@ -1,0 +1,24 @@
+
+USE checkmate_db;
+
+-- Add proof_image column to tasks table
+ALTER TABLE tasks
+    ADD COLUMN IF NOT EXISTS proof_image VARCHAR(255) DEFAULT NULL
+    AFTER completed_at;
+
+Link: https://checkmate.great-site.net/shared/index.php
+$host        = 'sql107.infinityfree.com';
+$dbname      = 'if0_41745502_checkmate_db';
+$username_db = 'if0_41745502';
+$password_db = 'checkmate2026';
+$port        = '3306';
+
+Link: https://checkmate.my-style.in/shared/index.php
+$host        = 'sql102.infinityfree.com';
+$dbname      = 'if0_41756542_checkmate_dbv2';
+$username_db = 'if0_41756542';
+$password_db = 'v2checkmate2026';
+$port        = '3306';
+
+LOCALHOST:
+Link: http://localhost/checkmate-app/shared/index.php
