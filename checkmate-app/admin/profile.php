@@ -1,16 +1,15 @@
 <?php
-// ── POST LOGIC BEFORE ANY OUTPUT ─────────────────────────
 require_once '../config/database.php';
 session_start();
 
-if (!isset($_SESSION['user_id']) || $_SESSION['role_id'] != 1) {
+if (!isset($_SESSION['user_id']) || (int)$_SESSION['role_id'] !== 1) {
     header("Location: ../shared/login.php"); exit();
 }
 
 $user_id = (int)$_SESSION['user_id'];
-$stmt    = $pdo->prepare("SELECT * FROM users WHERE id=?");
+$stmt    = $pdo->prepare("SELECT * FROM users WHERE id = ?");
 $stmt->execute([$user_id]);
-$user = $stmt->fetch(PDO::FETCH_ASSOC);
+$user = $stmt->fetch();
 
 $success = $error = '';
 
@@ -23,8 +22,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->prepare("UPDATE users SET username=? WHERE id=?")
                 ->execute([$username, $user_id]);
             $_SESSION['username'] = $username;
-            $success = 'Name updated successfully.';
-            $user['username'] = $username;
+            $user['username']     = $username;
+            $success = 'Display name updated.';
         }
     }
 
@@ -47,7 +46,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// ── NOW output HTML ───────────────────────────────────────
 require_once '../includes/header.php';
 ?>
 
@@ -59,7 +57,8 @@ require_once '../includes/header.php';
         <div class="alert alert-success alert-dismissible fade show mb-4">
             <i class="bi bi-check-circle me-2"></i>
             <?php echo htmlspecialchars($success); ?>
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            <button type="button" class="btn-close"
+                    data-bs-dismiss="alert"></button>
         </div>
         <?php endif; ?>
 
@@ -67,18 +66,22 @@ require_once '../includes/header.php';
         <div class="alert alert-danger alert-dismissible fade show mb-4">
             <i class="bi bi-exclamation-circle me-2"></i>
             <?php echo htmlspecialchars($error); ?>
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            <button type="button" class="btn-close"
+                    data-bs-dismiss="alert"></button>
         </div>
         <?php endif; ?>
 
+        <!-- Account info + settings -->
         <div class="cm-card mb-4">
             <div class="cm-card-header">
                 <div class="cm-card-title">Account Settings</div>
             </div>
             <div class="cm-card-body">
-                <!-- Account info -->
+
+                <!-- User info block -->
                 <div class="d-flex align-items-center gap-3 mb-4 p-3"
-                     style="background:#f8f9fc;border-radius:var(--radius-sm)">
+                     style="background:#f8f9fc;
+                            border-radius:var(--radius-sm)">
                     <div class="sidebar-avatar"
                          style="width:44px;height:44px;font-size:15px">
                         <?php echo strtoupper(substr(
@@ -88,26 +91,30 @@ require_once '../includes/header.php';
                         <div style="font-weight:600;font-size:14px">
                             <?php echo htmlspecialchars(
                                 $user['username'] ??
-                                explode('@',$user['email'])[0]); ?>
+                                explode('@', $user['email'])[0]); ?>
                         </div>
                         <div class="text-muted" style="font-size:12px">
                             <?php echo htmlspecialchars($user['email']); ?>
                         </div>
-                        <span class="cm-tag cm-tag-primary mt-1">Administrator</span>
+                        <span class="cm-tag cm-tag-primary mt-1">
+                            Administrator
+                        </span>
                     </div>
                 </div>
 
-                <!-- Change name -->
+                <!-- Change display name -->
                 <div class="mb-4">
-                    <label class="form-label">Change Display Name</label>
+                    <label class="form-label">Display Name</label>
                     <form method="POST" class="d-flex gap-2">
-                        <input type="hidden" name="action" value="update_name">
+                        <input type="hidden" name="action"
+                               value="update_name">
                         <input type="text" name="username"
                                class="form-control"
                                value="<?php echo htmlspecialchars(
                                    $user['username'] ?? ''); ?>"
                                required>
-                        <button type="submit" class="cm-btn cm-btn-primary">
+                        <button type="submit"
+                                class="cm-btn cm-btn-primary">
                             Save
                         </button>
                     </form>
@@ -118,7 +125,8 @@ require_once '../includes/header.php';
                 <!-- Change password -->
                 <div class="cm-card-title mb-3">Change Password</div>
                 <form method="POST">
-                    <input type="hidden" name="action" value="update_password">
+                    <input type="hidden" name="action"
+                           value="update_password">
                     <div class="mb-3">
                         <label class="form-label">Current Password</label>
                         <input type="password" name="current_password"
@@ -129,30 +137,47 @@ require_once '../includes/header.php';
                         <label class="form-label">New Password</label>
                         <input type="password" name="new_password"
                                class="form-control"
-                               placeholder="New password (min 6 chars)" required>
+                               placeholder="Min 6 characters" required>
                     </div>
                     <div class="mb-4">
-                        <label class="form-label">Confirm New Password</label>
+                        <label class="form-label">Confirm Password</label>
                         <input type="password" name="confirm_password"
                                class="form-control"
                                placeholder="Repeat new password" required>
                     </div>
-                    <button type="submit" class="cm-btn cm-btn-primary w-100">
+                    <button type="submit"
+                            class="cm-btn cm-btn-primary w-100">
                         <i class="bi bi-lock me-1"></i>Update Password
                     </button>
                 </form>
+
             </div>
         </div>
 
+        <!-- Logout card -->
         <div class="cm-card">
             <div class="cm-card-body">
-                <a href="../shared/logout.php"
-                   class="cm-btn cm-btn-danger w-100"
-                   onclick="return confirm('Log out?')">
-                    <i class="bi bi-box-arrow-right me-1"></i>Log Out
-                </a>
+                <div class="d-flex align-items-center
+                             justify-content-between">
+                    <div>
+                        <div style="font-size:13px;font-weight:600;
+                                    color:var(--text-main)">
+                            Sign Out
+                        </div>
+                        <div style="font-size:12px;color:var(--text-muted)">
+                            You will be redirected to the home screen
+                        </div>
+                    </div>
+                    <a href="../shared/logout.php"
+                       class="cm-btn cm-btn-danger"
+                       onclick="return confirm('Log out of Checkmate?')">
+                        <i class="bi bi-box-arrow-right me-1"></i>
+                        Log Out
+                    </a>
+                </div>
             </div>
         </div>
+
     </div>
 </div>
 
